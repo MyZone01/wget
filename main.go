@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	wget "wget/lib"
 )
 
@@ -12,11 +13,14 @@ func main() {
 
 	if !mirror {
 		wget.Domain = wget.GetDomain(url)
-		fileName, outputDir := wget.GetFilenameAndDirFromURL(url)
+		fileName, _ := wget.GetFilenameAndDirFromURL(url)
 		if output != "" {
-			outputDir = output
+			fileName = output
 		}
-		wget.DownloadAndSaveResource(url, fileName, outputDir, logFile, rateLimit)
+		resp, err := wget.DownloadAndSaveResource(url, fileName, downloadPath, logFile, rateLimit)
+		if err != nil {
+			fmt.Printf("Error downloading %s: %v, %v\n", url, err, resp)
+		}
 	} else {
 		wget.MirrorWebsite(url, downloadPath, logFile, rateLimit)
 	}

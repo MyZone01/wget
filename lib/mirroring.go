@@ -148,28 +148,29 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 	}
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
 	defer resp.Body.Close()
+	
+	totalSize, err := strconv.Atoi(resp.Header.Get("Content-Length"))
+	if err != nil {
+		return resp, fmt.Errorf("error converting total size: %s", err)
+	}
 
 	// Create the directory structure if it doesn't exist
 	err = os.MkdirAll(outputDir, os.ModePerm)
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
 
 	// Create the local file and copy the resource into it
 	filePath := path.Join(outputDir, fileName)
 	localFile, err := os.Create(filePath)
 	if err != nil {
-		return nil, err
+		return resp, err
 	}
 	defer localFile.Close()
 
-	totalSize, err := strconv.Atoi(resp.Header.Get("Content-Length"))
-	if err != nil {
-		return nil, fmt.Errorf("error %s", err)
-	}
 
 	const barWidth = 50
 	progress := make([]rune, barWidth)
@@ -182,7 +183,7 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 	if resp.StatusCode == http.StatusOK {
 		initString += "status 200 OK\n"
 	} else {
-		return nil, fmt.Errorf("error %s", err)
+		return resp, fmt.Errorf("error %s", err)
 	}
 	initString += fmt.Sprintf("Content size: %d\n", totalSize)
 	initString += fmt.Sprintf("Saving to: ./%s\n\n", filePath)
@@ -197,12 +198,12 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 		buffer := make([]byte, 1024)
 		chunk, err := resp.Body.Read(buffer)
 		if err != nil && err != io.EOF {
-			return nil, fmt.Errorf("error %s", err)
+			return resp, fmt.Errorf("error %s", err)
 		}
 
 		_, err = localFile.Write(buffer[:chunk])
 		if err != nil {
-			return nil, fmt.Errorf("error %s", err)
+			return resp, fmt.Errorf("error %s", err)
 		}
 
 		downloadedSize += chunk
@@ -244,7 +245,7 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 			} else {
 				file, err := os.Create("wget-log")
 				if err != nil {
-					return nil, fmt.Errorf("error %s", err)
+					return resp, fmt.Errorf("error %s", err)
 				}
 				file.WriteString(initString + endString)
 			}

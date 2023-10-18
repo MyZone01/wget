@@ -13,6 +13,30 @@ import (
 	"time"
 )
 
+// GetArgs returns the command line arguments required for the program.
+//
+// The function does the following:
+// - Retrieves the number of command line arguments.
+// - Prints the usage message if there are less than 2 arguments.
+// - Returns empty strings, 0, false, "", false, true if there are less than 2 arguments.
+// - Retrieves the last argument as the URL.
+// - Prints an error message if the URL is empty.
+// - Returns empty strings, 0, false, "", false, true if the URL is empty.
+// - Parses the command line flags.
+// - Retrieves the values of the flags and assigns them to variables.
+// - Converts the rate limit to bytes per second.
+// - Prints an error message if there is an error converting the rate limit.
+// - Returns empty strings, 0, false, "", false, true if there is an error converting the rate limit.
+// - Returns the URL, output file name, rate limit, log file, download file path, mirror site, and a false value.
+//
+// Return values:
+// - string: URL of the website.
+// - string: Output file name.
+// - int: Download speed limit in bytes per second.
+// - bool: Log file.
+// - string: Download file path.
+// - bool: Mirror site.
+// - bool: Error flag.
 func GetArgs() (string, string, int, bool, string, bool, bool) {
 	nbArgs := len(os.Args)
 	if nbArgs < 2 {
@@ -28,7 +52,7 @@ func GetArgs() (string, string, int, bool, string, bool, bool) {
 
 	_rateLimit := flag.String("rate-limit", "", "Download speed limit in bytes per second")
 	_output := flag.String("O", "", "Output file name")
-	_downloadPath := flag.String("P", "", "Download file path")
+	_downloadPath := flag.String("P", ".", "Download file path")
 	_mirror := flag.Bool("mirror", false, "Mirror site")
 	_logFile := flag.Bool("B", false, "Log file")
 	flag.Parse()
@@ -45,6 +69,17 @@ func GetArgs() (string, string, int, bool, string, bool, bool) {
 	return url, output, rateLimit, logFile, downloadPath, mirror, false
 }
 
+// CreateOutputFile creates an output file with the given parameters.
+//
+// It takes in three parameters:
+// - output: the name of the output file (string).
+// - url: the URL used to retrieve the resource name (string).
+// - downloadPath: the path where the output file will be downloaded (string).
+//
+// The function returns three values:
+// - output: the name of the output file (string).
+// - file: a pointer to the created file (os.File).
+// - bool: a boolean indicating if there was an error during the creation of the file (bool).
 func CreateOutputFile(output string, url string, downloadPath string) (string, *os.File, bool) {
 	if output == "" {
 		_output, err := getResourceName(url)
@@ -66,6 +101,10 @@ func CreateOutputFile(output string, url string, downloadPath string) (string, *
 	return output, file, false
 }
 
+// FormatFileSize formats the given file size into a human-readable format.
+//
+// It takes an integer size as input, representing the size of the file in bytes.
+// It returns a string representing the formatted file size.
 func FormatFileSize(size int) string {
 	const (
 		KiB = 1024
@@ -85,6 +124,14 @@ func FormatFileSize(size int) string {
 	}
 }
 
+// getResourceName retrieves the name of a resource from a given URL path.
+//
+// It takes a single parameter:
+// - urlPath: a string representing the URL path from which to retrieve the resource name.
+//
+// It returns two values:
+// - resourceName: a string representing the name of the resource.
+// - err: an error, if any occurred during the process.
 func getResourceName(urlPath string) (string, error) {
 	parsedURL, err := url.Parse(urlPath)
 	if err != nil {
@@ -95,6 +142,10 @@ func getResourceName(urlPath string) (string, error) {
 	return resourceName, nil
 }
 
+// convertFileSizeToBytes converts a file size string to bytes.
+//
+// It takes the fileSize string as a parameter, which represents the size of a file.
+// The function returns an integer value representing the file size in bytes and an error.
 func convertFileSizeToBytes(fileSize string) (int, error) {
 	if fileSize == "" {
 		return 0, nil
@@ -136,6 +187,18 @@ func convertFileSizeToBytes(fileSize string) (int, error) {
 	}
 }
 
+// downloadAndSaveResource downloads a resource from the given URL and saves it to the specified output file.
+//
+// Parameters:
+// - url: the URL of the resource to download (string)
+// - output: the name of the output file (string)
+// - downloadPath: the path where the file should be saved (string)
+// - logFile: whether to log the progress to a file (bool)
+// - rateLimit: the maximum download rate in bytes per second (int)
+//
+// Returns:
+// - true if there was an error during the download and save process (bool)
+// - false otherwise (bool)
 func downloadAndSaveResource(url string, output string, downloadPath string, logFile bool, rateLimit int) bool {
 	resp, err := http.Get(url)
 	if err != nil {
