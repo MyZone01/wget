@@ -39,17 +39,17 @@ import (
 // - string: Download file path.
 // - bool: Mirror site.
 // - bool: Error flag.
-func GetArgs() (string, string, int, bool, string, bool, bool) {
+func GetArgs() (string, string, int, bool, string, bool, bool, string) {
 	nbArgs := len(os.Args)
 	if nbArgs < 2 {
 		fmt.Println("Usage: ./wget <url>")
-		return "", "", 0, false, "", false, true
+		return "", "", 0, false, "", false, true, ""
 	}
 
 	urlString := os.Args[nbArgs-1]
 	if urlString == "" {
 		fmt.Println("Please provide a valid URL.")
-		return "", "", 0, false, "", false, true
+		return "", "", 0, false, "", false, true, ""
 	}
 
 	_rateLimit := flag.String("rate-limit", "", "Download speed limit in bytes per second")
@@ -57,22 +57,24 @@ func GetArgs() (string, string, int, bool, string, bool, bool) {
 	_downloadPath := flag.String("P", ".", "Download file path")
 	_mirror := flag.Bool("mirror", false, "Mirror site")
 	_logFile := flag.Bool("B", false, "Log file")
+	_UrlFile := flag.String("i", "", "Urls file")
 	flag.Parse()
 	output := *_output
 	rateLimit, err := convertFileSizeToBytes(*_rateLimit)
 	if err != nil {
 		fmt.Println("🚩 Error:", err)
-		return "", "", 0, false, "", false, true
+		return "", "", 0, false, "", false, true, ""
 	}
 
 	logFile := *_logFile
 	downloadPath := *_downloadPath
 	mirror := *_mirror
-	return urlString, output, rateLimit, logFile, downloadPath, mirror, false
+	UrlFile := *_UrlFile
+	return urlString, output, rateLimit, logFile, downloadPath, mirror, false, UrlFile
 }
 
 func expandTilde(path string) (string, error) {
-	if path[:2] == "~/" {
+	if len(path) > 3 && path[:2] == "~/" {
 		currentUser, err := user.Current()
 		if err != nil {
 			return "", err

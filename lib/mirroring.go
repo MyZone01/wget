@@ -17,6 +17,9 @@ import (
 )
 
 var Domain = ""
+var Res []int
+var Finish = ""
+var TabUrl []string
 
 const user_agent = "Golang Mirror v. 2.0"
 
@@ -82,7 +85,7 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 						if !strings.HasSuffix(link, ".html") {
 							// Extract the file name from the URL
 							fileName, outputDir := GetFilenameAndDirFromURL(link)
-							_, err := DownloadAndSaveResource(link, fileName, outputDir, logFile, rateLimit)
+							_, err, _, _, _ := DownloadAndSaveResource(link, fileName, outputDir, logFile, rateLimit, false)
 							if err != nil {
 								fmt.Printf("Error downloading %s: %v\n", link, err)
 							}
@@ -104,7 +107,7 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 	}
 
 	fileName, _ := GetFilenameAndDirFromURL(url)
-	_, err = DownloadAndSaveResource(url, fileName, outputDir, logFile, rateLimit)
+	_, err, _, _, _ = DownloadAndSaveResource(url, fileName, outputDir, logFile, rateLimit, false)
 	if err != nil {
 		fmt.Printf("Error downloading %s: %v\n", url, err)
 	}
@@ -157,13 +160,13 @@ func GetDomain(urlString string) string {
 //
 // Returns:
 // - error: an error if any occurred during the download or saving process
-func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rateLimit int) (*http.Response, error) {
+func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rateLimit int, changeDisplay bool) (*http.Response, error, []int, string, []string) {
 	if GetDomain(url) != Domain {
-		return nil, fmt.Errorf("domain mismatch: %s != %s", GetDomain(url), Domain)
+		return nil, fmt.Errorf("domain mismatch: %s != %s", GetDomain(url), Domain), nil, "", nil
 	}
 	resp, err := launchRequest(url)
 	if err != nil {
-		return resp, err
+		return resp, err, nil, "", nil
 	}
 	defer resp.Body.Close()
 
@@ -177,13 +180,13 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 				break
 			}
 			if err != nil {
-				return resp, err
+				return resp, err, nil, "", nil
 			}
 			totalSize += n
 		}
 		resp, err = launchRequest(url)
 		if err != nil {
-			return resp, err
+			return resp, err, nil, "", nil
 		}
 		defer resp.Body.Close()
 		// return resp, fmt.Errorf("error converting total size: %s", err)
@@ -192,14 +195,14 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 	// Create the directory structure if it doesn't exist
 	outputDir, err = expandTilde(outputDir)
 	if err != nil {
-		return resp, err
+		return resp, err, nil, "", nil
 	}
 	_, err = os.Stat(outputDir)
 	if os.IsNotExist(err) {
 		// The folder does not exist.
 		err = os.MkdirAll(outputDir, os.ModePerm)
 		if err != nil {
-			return resp, err
+			return resp, err, nil, "", nil
 		}
 	}
 
@@ -207,7 +210,7 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 	filePath := path.Join(outputDir, fileName)
 	localFile, err := os.Create(filePath)
 	if err != nil {
-		return resp, err
+		return resp, err, nil, "", nil
 	}
 	defer localFile.Close()
 
@@ -222,13 +225,16 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 	if resp.StatusCode == http.StatusOK {
 		initString += "status 200 OK\n"
 	} else {
-		return resp, fmt.Errorf("error %s", err)
+		return resp, fmt.Errorf("error %s", err), nil, "", nil
 	}
 	initString += fmt.Sprintf("Content size: %d\n", totalSize)
-	initString += fmt.Sprintf("Saving file to: %s\n\n", filePath)
+	initString += fmt.Sprintf("Saving file to: %s\n", filePath)
 
-	if !logFile {
+	if !logFile && !changeDisplay {
 		fmt.Print(initString)
+	}
+	if changeDisplay {
+		Res = append(Res, totalSize)
 	}
 
 	var downloadedSize int
@@ -236,12 +242,12 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 		buffer := make([]byte, 1024)
 		chunk, err := resp.Body.Read(buffer)
 		if err != nil && err != io.EOF {
-			return resp, fmt.Errorf("error %s", err)
+			return resp, fmt.Errorf("error %s", err), nil, "", nil
 		}
 
 		_, err = localFile.Write(buffer[:chunk])
 		if err != nil {
-			return resp, fmt.Errorf("error %s", err)
+			return resp, fmt.Errorf("error %s", err), nil, "", nil
 		}
 
 		downloadedSize += chunk
@@ -260,9 +266,9 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 		bytesPerSec := int(float64(downloadedSize) / elapsedTime.Seconds())
 		remainingTime := time.Duration(float64(elapsedTime) / float64(downloadedSize) * float64(totalSize-downloadedSize))
 
-		if !logFile {
+		if !logFile && !changeDisplay {
 			fmt.Printf(
-				"\r%s / %s [%s] %.2f%% - %s/s Time Remaining: %s - Time Elapsed: %s",
+				"\r %s / %s [%s] %.2f%% - %s/s Time Remaining: %s - Time Elapsed: %s",
 				FormatFileSize(downloadedSize),
 				FormatFileSize(totalSize),
 				string(progress),
@@ -278,14 +284,17 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 			endTimeString := endTime.Format("2006-01-02 15:04:05")
 			endString += fmt.Sprintf("Download completed [%s]\n", url)
 			endString += fmt.Sprintf("finished at: %s\n", endTimeString)
-			if !logFile {
+			if !logFile && !changeDisplay {
 				fmt.Print("\n\n" + endString)
-			} else {
+			} else if logFile {
 				file, err := os.Create("wget-log")
 				if err != nil {
-					return resp, fmt.Errorf("error %s", err)
+					return resp, fmt.Errorf("error %s", err), nil, "", nil
 				}
 				file.WriteString(initString + endString)
+			} else if changeDisplay {
+				Finish += "finished " + fileName + "\n"
+				TabUrl = append(TabUrl, url)
 			}
 			break
 		}
@@ -295,7 +304,7 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 			time.Sleep(sleepDuration)
 		}
 	}
-	return resp, err
+	return resp, err, Res, Finish, TabUrl
 }
 
 // launchRequest sends a GET request to the specified URL and returns the HTTP response and any error encountered.
