@@ -1,6 +1,7 @@
 package wget
 
 import (
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 )
 
 var Domain = ""
+
+const user_agent = "Golang Mirror v. 2.0"
 
 // MirrorWebsite mirrors a website by recursively downloading all its pages.
 //
@@ -146,12 +149,12 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 	if GetDomain(url) != Domain {
 		return nil, fmt.Errorf("domain mismatch: %s != %s", GetDomain(url), Domain)
 	}
-	resp, err := http.Get(url)
+	resp, err := launchRequest(url)
 	if err != nil {
 		return resp, err
 	}
 	defer resp.Body.Close()
-	
+
 	totalSize, err := strconv.Atoi(resp.Header.Get("Content-Length"))
 	if err != nil {
 		return resp, fmt.Errorf("error converting total size: %s", err)
@@ -170,7 +173,6 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 		return resp, err
 	}
 	defer localFile.Close()
-
 
 	const barWidth = 50
 	progress := make([]rune, barWidth)
@@ -257,5 +259,27 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 			time.Sleep(sleepDuration)
 		}
 	}
+	return resp, err
+}
+
+// launchRequest sends a GET request to the specified URL and returns the HTTP response and any error encountered.
+//
+// url: The URL to send the request to.
+//
+// Returns:
+// - *http.Response: The HTTP response from the server.
+// - error: Any error encountered during the request.
+func launchRequest(url string) (*http.Response, error) {
+	tlsConfig := &tls.Config{InsecureSkipVerify: true}
+	transport := &http.Transport{TLSClientConfig: tlsConfig}
+	client := &http.Client{Transport: transport}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+        return nil, err
+    }
+	req.Header.Set("User-Agent", user_agent)
+
+	resp, err := client.Do(req)
 	return resp, err
 }
