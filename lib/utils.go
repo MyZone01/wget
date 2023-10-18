@@ -73,6 +73,10 @@ func GetArgs() (string, string, int, bool, string, bool, bool, string) {
 	return urlString, output, rateLimit, logFile, downloadPath, mirror, false, UrlFile
 }
 
+// expandTilde expands a path that starts with "~/" by replacing it with the current user's home directory.
+//
+// path: the path to expand.
+// returns: the expanded path or an error if the current user's home directory cannot be determined.
 func expandTilde(path string) (string, error) {
 	if len(path) > 3 && path[:2] == "~/" {
 		currentUser, err := user.Current()

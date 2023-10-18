@@ -68,9 +68,7 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 		tokenType := tokens.Next()
 		switch tokenType {
 		case html.ErrorToken:
-			stop = true
-			break // Finished parsing
-
+			stop = true // Finished parsing
 		case html.StartTagToken, html.SelfClosingTagToken:
 			token := tokens.Token()
 			if token.Data == "a" || token.Data == "link" || token.Data == "img" || token.Data == "script" {
@@ -97,7 +95,6 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 					}
 				}
 			}
-
 		default:
 			// Other token types can be ignored
 		}
