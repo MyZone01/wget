@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/user"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -40,12 +42,12 @@ import (
 func GetArgs() (string, string, int, bool, string, bool, bool) {
 	nbArgs := len(os.Args)
 	if nbArgs < 2 {
-		fmt.Println("Usage: go run main.go <url>")
+		fmt.Println("Usage: ./wget <url>")
 		return "", "", 0, false, "", false, true
 	}
 
-	url := os.Args[nbArgs-1]
-	if url == "" {
+	urlString := os.Args[nbArgs-1]
+	if urlString == "" {
 		fmt.Println("Please provide a valid URL.")
 		return "", "", 0, false, "", false, true
 	}
@@ -66,7 +68,18 @@ func GetArgs() (string, string, int, bool, string, bool, bool) {
 	logFile := *_logFile
 	downloadPath := *_downloadPath
 	mirror := *_mirror
-	return url, output, rateLimit, logFile, downloadPath, mirror, false
+	return urlString, output, rateLimit, logFile, downloadPath, mirror, false
+}
+
+func expandTilde(path string) (string, error) {
+	if path[:2] == "~/" {
+		currentUser, err := user.Current()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(currentUser.HomeDir, path[2:]), nil
+	}
+	return path, nil
 }
 
 // CreateOutputFile creates an output file with the given parameters.

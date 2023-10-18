@@ -157,14 +157,39 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 
 	totalSize, err := strconv.Atoi(resp.Header.Get("Content-Length"))
 	if err != nil {
-		return resp, fmt.Errorf("error converting total size: %s", err)
+		buffer := make([]byte, 1024)
+		for {
+			n, err := resp.Body.Read(buffer)
+			if err == io.EOF {
+				totalSize += n
+				break
+			}
+			if err != nil {
+				return resp, err
+			}
+			totalSize += n
+		}
+		resp, err = launchRequest(url)
+		if err != nil {
+			return resp, err
+		}
+		defer resp.Body.Close()
+		// return resp, fmt.Errorf("error converting total size: %s", err)
 	}
 
 	// Create the directory structure if it doesn't exist
-	err = os.MkdirAll(outputDir, os.ModePerm)
+	outputDir, err = expandTilde(outputDir)
 	if err != nil {
 		return resp, err
 	}
+    _, err = os.Stat(outputDir)
+    if os.IsNotExist(err) {
+        // The folder does not exist.
+		err = os.MkdirAll(outputDir, os.ModePerm)
+		if err != nil {
+			return resp, err
+		}
+    }
 
 	// Create the local file and copy the resource into it
 	filePath := path.Join(outputDir, fileName)
@@ -188,7 +213,7 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 		return resp, fmt.Errorf("error %s", err)
 	}
 	initString += fmt.Sprintf("Content size: %d\n", totalSize)
-	initString += fmt.Sprintf("Saving to: ./%s\n\n", filePath)
+	initString += fmt.Sprintf("Saving file to: %s\n\n", filePath)
 
 	if !logFile {
 		fmt.Print(initString)
@@ -196,7 +221,6 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 
 	var downloadedSize int
 	for {
-
 		buffer := make([]byte, 1024)
 		chunk, err := resp.Body.Read(buffer)
 		if err != nil && err != io.EOF {
@@ -276,8 +300,8 @@ func launchRequest(url string) (*http.Response, error) {
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-        return nil, err
-    }
+		return nil, err
+	}
 	req.Header.Set("User-Agent", user_agent)
 
 	resp, err := client.Do(req)
