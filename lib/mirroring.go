@@ -15,14 +15,14 @@ import (
 	"golang.org/x/net/html"
 )
 
-var domain = ""
+var Domain = ""
 
 // MirrorWebsite mirrors a website by recursively downloading all its pages.
 //
 // It takes a URL and an output directory as parameters and returns an error if the operation fails.
 func MirrorWebsite(urlString, downloadPath string, logFile bool, rateLimit int) error {
-	domain = getDomain(urlString)
-	folderName := filepath.Join(".", domain)
+	Domain = GetDomain(urlString)
+	folderName := filepath.Join(".", Domain)
 
 	// Create output directory
 	err := os.MkdirAll(folderName, os.ModePerm)
@@ -43,13 +43,14 @@ func MirrorWebsite(urlString, downloadPath string, logFile bool, rateLimit int) 
 // Returns:
 // - error: an error if there was a problem while mirroring the page, otherwise nil.
 func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, rateLimit int) error {
-	if getDomain(url) != domain || visited[url] {
+	if GetDomain(url) != Domain || visited[url] {
 		return nil
 	}
 
 	visited[url] = true
 
-	resp, err := DownloadAndSaveResource(url, outputDir, logFile, rateLimit)
+	fileName, _ := GetFilenameAndDirFromURL(url)
+	resp, err := DownloadAndSaveResource(url, fileName, outputDir, logFile, rateLimit)
 	if err != nil {
 		fmt.Printf("Error downloading %s: %v\n", url, err)
 	}
@@ -72,9 +73,11 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 							link = resolveRelativeURL(url, link)
 						}
 
+						// Download and save the linked resource
 						if !strings.HasSuffix(link, ".html") {
-							// Download and save the linked resource
-							_, err := DownloadAndSaveResource(link, outputDir, logFile, rateLimit)
+							// Extract the file name from the URL
+							fileName, outputDir := GetFilenameAndDirFromURL(link)
+							_, err := DownloadAndSaveResource(link, fileName, outputDir, logFile, rateLimit)
 							if err != nil {
 								fmt.Printf("Error downloading %s: %v\n", link, err)
 							}
@@ -93,6 +96,16 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 	}
 }
 
+func GetFilenameAndDirFromURL(link string) (string, string) {
+	_subDir, fileName := path.Split(link)
+	subDir := strings.Split(_subDir, "/")
+	outputDir := strings.Join(subDir[2:len(subDir)-1], "/")
+	if fileName == "" {
+		fileName = "index.html"
+	}
+	return fileName, outputDir
+}
+
 // resolveRelativeURL resolves a relative URL against a base URL.
 //
 // It takes two parameters:
@@ -106,12 +119,12 @@ func resolveRelativeURL(baseURL, relativeURL string) string {
 	return base.ResolveReference(rel).String()
 }
 
-// getDomain returns the domain of a given URL.
+// GetDomain returns the domain of a given URL.
 //
 // It takes a urlString string as a parameter and parses it to get the domain.
 // If there is an error parsing the URL, it prints the error message and returns "unknown".
 // Otherwise, it returns the domain.
-func getDomain(urlString string) string {
+func GetDomain(urlString string) string {
 	// Parse URL to get the domain
 	u, err := url.Parse(urlString)
 	if err != nil {
@@ -129,9 +142,9 @@ func getDomain(urlString string) string {
 //
 // Returns:
 // - error: an error if any occurred during the download or saving process
-func DownloadAndSaveResource(url, outputDir string, logFile bool, rateLimit int) (*http.Response, error) {
-	if getDomain(url) != domain {
-		return nil, fmt.Errorf("domain mismatch: %s != %s", getDomain(url), domain)
+func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rateLimit int) (*http.Response, error) {
+	if GetDomain(url) != Domain {
+		return nil, fmt.Errorf("domain mismatch: %s != %s", GetDomain(url), Domain)
 	}
 	resp, err := http.Get(url)
 	if err != nil {
@@ -139,22 +152,14 @@ func DownloadAndSaveResource(url, outputDir string, logFile bool, rateLimit int)
 	}
 	defer resp.Body.Close()
 
-	// Extract the file name from the URL
-	_subDir, fileName := path.Split(url)
-	subDir := strings.Split(_subDir, "/")
-	_outputDir := strings.Join(subDir[2:len(subDir)-1], "/")
-	if fileName == "" {
-		fileName = "index.html"
-	}
-
 	// Create the directory structure if it doesn't exist
-	err = os.MkdirAll(_outputDir, os.ModePerm)
+	err = os.MkdirAll(outputDir, os.ModePerm)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create the local file and copy the resource into it
-	filePath := path.Join(_outputDir, fileName)
+	filePath := path.Join(outputDir, fileName)
 	localFile, err := os.Create(filePath)
 	if err != nil {
 		return nil, err
@@ -163,7 +168,7 @@ func DownloadAndSaveResource(url, outputDir string, logFile bool, rateLimit int)
 
 	totalSize, err := strconv.Atoi(resp.Header.Get("Content-Length"))
 	if err != nil {
-		return nil, fmt.Errorf("🚩 Error:", err)
+		return nil, fmt.Errorf("error %s", err)
 	}
 
 	const barWidth = 50
@@ -177,7 +182,7 @@ func DownloadAndSaveResource(url, outputDir string, logFile bool, rateLimit int)
 	if resp.StatusCode == http.StatusOK {
 		initString += "status 200 OK\n"
 	} else {
-		return nil, fmt.Errorf("🚩 Error:", err)
+		return nil, fmt.Errorf("error %s", err)
 	}
 	initString += fmt.Sprintf("Content size: %d\n", totalSize)
 	initString += fmt.Sprintf("Saving to: ./%s\n\n", filePath)
@@ -192,12 +197,12 @@ func DownloadAndSaveResource(url, outputDir string, logFile bool, rateLimit int)
 		buffer := make([]byte, 1024)
 		chunk, err := resp.Body.Read(buffer)
 		if err != nil && err != io.EOF {
-			return nil, fmt.Errorf("🚩 Error:", err)
+			return nil, fmt.Errorf("error %s", err)
 		}
 
 		_, err = localFile.Write(buffer[:chunk])
 		if err != nil {
-			return nil, fmt.Errorf("🚩 Error:", err)
+			return nil, fmt.Errorf("error %s", err)
 		}
 
 		downloadedSize += chunk
@@ -239,7 +244,7 @@ func DownloadAndSaveResource(url, outputDir string, logFile bool, rateLimit int)
 			} else {
 				file, err := os.Create("wget-log")
 				if err != nil {
-					return nil, fmt.Errorf("🚩 Error:", err)
+					return nil, fmt.Errorf("error %s", err)
 				}
 				file.WriteString(initString + endString)
 			}
