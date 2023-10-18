@@ -9,7 +9,9 @@ import (
 )
 
 func main() {
-	url, output, rateLimit, logFile, downloadPath, mirror, shouldReturn, UrlFile := wget.GetArgs()
+	url, output, rateLimit, logFile, downloadPath, mirror, shouldReturn, UrlFile, reject, exclude := wget.GetArgs()
+	fmt.Println(reject)
+	fmt.Println(exclude)
 	var lines []string
 	changeDisplay := false
 	if UrlFile != "" {
