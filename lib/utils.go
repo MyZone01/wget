@@ -11,43 +11,46 @@ import (
 )
 
 
-func GetArgs() (string, string, int, bool, string, bool) {
+func GetArgs() (string, string, int, bool, string, bool, bool) {
 	nbArgs := len(os.Args)
 	if nbArgs < 2 {
 		fmt.Println("Usage: go run main.go <url>")
-		return "", "", 0, false, "", true
+		return "", "", 0, false, "", false, true
 	}
 
 	url := os.Args[nbArgs-1]
 	if url == "" {
 		fmt.Println("Please provide a valid URL.")
-		return "", "", 0, false, "", true
+		return "", "", 0, false, "", false, true
 	}
 
 	_rateLimit := flag.String("rate-limit", "0B", "Download speed limit in bytes per second")
 	_output := flag.String("O", "", "Output file name")
 	_downloadPath := flag.String("P", "", "Download file path")
+	_mirror := flag.Bool("mirror", false, "Mirror site")
 	_logFile := flag.Bool("B", false, "Log file")
 	flag.Parse()
 	output := *_output
 	rateLimit, err := convertFileSizeToBytes(*_rateLimit)
 	if err != nil {
 		fmt.Println("🚩 Error:", err)
-		return "", "", 0, false, "", true
+		return "", "", 0, false, "",false,  true
 	}
 
 	logFile := *_logFile
 	downloadPath := *_downloadPath
-	return url, output, rateLimit, logFile, downloadPath, false
+	mirror := *_mirror
+	return url, output, rateLimit, logFile, downloadPath, mirror, false
 }
 
-func CreateOutputFile(output string, err error, url string, downloadPath string) (string, *os.File, bool) {
+func CreateOutputFile(output string, url string, downloadPath string) (string, *os.File, bool) {
 	if output == "" {
-		output, err = getResourceName(url)
+		_output, err := getResourceName(url)
 		if err != nil {
 			fmt.Println("🚩 Error:", err)
 			return "", nil, true
 		}
+		output = _output
 	}
 	if downloadPath != "" {
 		output = downloadPath + "/" + output
