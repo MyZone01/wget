@@ -52,19 +52,21 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 
 	visited[url] = true
 
-	fileName, _ := GetFilenameAndDirFromURL(url)
-	resp, err := DownloadAndSaveResource(url, fileName, outputDir, logFile, rateLimit)
+	resp, err := launchRequest(url)
 	if err != nil {
-		fmt.Printf("Error downloading %s: %v\n", url, err)
+		return err
 	}
+	defer resp.Body.Close()
 
 	tokens := html.NewTokenizer(resp.Body)
 
+	stop := false
 	for {
 		tokenType := tokens.Next()
 		switch tokenType {
 		case html.ErrorToken:
-			return nil // Finished parsing
+			stop = true
+			break // Finished parsing
 
 		case html.StartTagToken, html.SelfClosingTagToken:
 			token := tokens.Token()
@@ -96,7 +98,17 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 		default:
 			// Other token types can be ignored
 		}
+		if stop {
+			break
+		}
 	}
+
+	fileName, _ := GetFilenameAndDirFromURL(url)
+	_, err = DownloadAndSaveResource(url, fileName, outputDir, logFile, rateLimit)
+	if err != nil {
+		fmt.Printf("Error downloading %s: %v\n", url, err)
+	}
+	return nil
 }
 
 func GetFilenameAndDirFromURL(link string) (string, string) {
@@ -182,14 +194,14 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 	if err != nil {
 		return resp, err
 	}
-    _, err = os.Stat(outputDir)
-    if os.IsNotExist(err) {
-        // The folder does not exist.
+	_, err = os.Stat(outputDir)
+	if os.IsNotExist(err) {
+		// The folder does not exist.
 		err = os.MkdirAll(outputDir, os.ModePerm)
 		if err != nil {
 			return resp, err
 		}
-    }
+	}
 
 	// Create the local file and copy the resource into it
 	filePath := path.Join(outputDir, fileName)
