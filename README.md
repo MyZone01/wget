@@ -37,4 +37,10 @@ finished at 2017-10-14 03:46:07
 ##  SOURCES
 +   [WGET - wikipedia](https://en.wikipedia.org/wiki/Wget)
 +   [Mirroring - wikipedia](https://en.wikipedia.org/wiki/Mirror_site)
-+   
+
+
+##  AUTHORS
++   Pape Alassane BA (@pba)
++   Papa Gondia Gueye (@papgueye)
++   Louis Sébastien Malack (@lomalack)
++   Serigne Saliou Mbacké Mbaye (@serignmbaye)
