@@ -9,9 +9,7 @@ import (
 )
 
 func main() {
-	url, output, rateLimit, logFile, downloadPath, mirror, shouldReturn, UrlFile, reject, exclude := wget.GetArgs()
-	fmt.Println(reject)
-	fmt.Println(exclude)
+	url, output, rateLimit, logFile, downloadPath, mirror, shouldReturn, UrlFile, reject, _ := wget.GetArgs()
 	var lines []string
 	changeDisplay := false
 	if UrlFile != "" {
@@ -38,6 +36,10 @@ func main() {
 	var res []int
 	var finish string
 	var tabUrl []string
+
+	if logFile {
+		fmt.Println("Output will be written to ‘wget-log’.")
+	}
 	if !mirror {
 		for i := 0; i < len(lines); i++ {
 			url = lines[i]
@@ -46,7 +48,7 @@ func main() {
 			if output != "" {
 				fileName = output
 			}
-			resp, err, a, b, c := wget.DownloadAndSaveResource(url, fileName, downloadPath, logFile, rateLimit, changeDisplay)
+			resp, err, a, b, c := wget.DownloadAndSaveResource(url, fileName, downloadPath, reject, logFile, rateLimit, changeDisplay)
 			if err != nil {
 				fmt.Printf("Error downloading %s: %v, %v\n", url, err, resp)
 			}
@@ -60,6 +62,6 @@ func main() {
 		}
 
 	} else {
-		wget.MirrorWebsite(url, downloadPath, logFile, rateLimit)
+		wget.MirrorWebsite(url, downloadPath, reject, logFile, rateLimit)
 	}
 }

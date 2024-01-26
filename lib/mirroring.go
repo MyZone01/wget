@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ const user_agent = "Golang Mirror v. 2.0"
 // MirrorWebsite mirrors a website by recursively downloading all its pages.
 //
 // It takes a URL and an output directory as parameters and returns an error if the operation fails.
-func MirrorWebsite(urlString, downloadPath string, logFile bool, rateLimit int) error {
+func MirrorWebsite(urlString, downloadPath string, reject []string, logFile bool, rateLimit int) error {
 	Domain = GetDomain(urlString)
 	folderName := filepath.Join(".", Domain)
 
@@ -36,7 +37,7 @@ func MirrorWebsite(urlString, downloadPath string, logFile bool, rateLimit int) 
 		return fmt.Errorf("error creating output directory: %v", err)
 	}
 	visited := make(map[string]bool)
-	return mirrorPage(urlString, folderName, visited, logFile, rateLimit)
+	return mirrorPage(urlString, folderName, reject, visited, logFile, rateLimit)
 }
 
 // mirrorPage mirrors a web page by downloading its resources and recursively mirroring linked pages.
@@ -48,7 +49,7 @@ func MirrorWebsite(urlString, downloadPath string, logFile bool, rateLimit int) 
 //
 // Returns:
 // - error: an error if there was a problem while mirroring the page, otherwise nil.
-func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, rateLimit int) error {
+func mirrorPage(url, outputDir string, reject []string, visited map[string]bool, logFile bool, rateLimit int) error {
 	if GetDomain(url) != Domain || visited[url] {
 		return nil
 	}
@@ -83,7 +84,7 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 						if !strings.HasSuffix(link, ".html") {
 							// Extract the file name from the URL
 							fileName, outputDir := GetFilenameAndDirFromURL(link)
-							_, err, _, _, _ := DownloadAndSaveResource(link, fileName, outputDir, logFile, rateLimit, false)
+							_, err, _, _, _ := DownloadAndSaveResource(link, fileName, outputDir, reject, logFile, rateLimit, false)
 							if err != nil {
 								fmt.Printf("Error downloading %s: %v\n", link, err)
 							}
@@ -91,7 +92,7 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 						}
 
 						// Recursively mirror linked page
-						mirrorPage(link, outputDir, visited, logFile, rateLimit)
+						mirrorPage(link, outputDir, reject, visited, logFile, rateLimit)
 					}
 				}
 			}
@@ -104,7 +105,7 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 	}
 
 	fileName, _ := GetFilenameAndDirFromURL(url)
-	_, err, _, _, _ = DownloadAndSaveResource(url, fileName, outputDir, logFile, rateLimit, false)
+	_, err, _, _, _ = DownloadAndSaveResource(url, fileName, outputDir, reject, logFile, rateLimit, false)
 	if err != nil {
 		fmt.Printf("Error downloading %s: %v\n", url, err)
 	}
@@ -113,11 +114,17 @@ func mirrorPage(url, outputDir string, visited map[string]bool, logFile bool, ra
 
 func GetFilenameAndDirFromURL(link string) (string, string) {
 	_subDir, fileName := path.Split(link)
-	subDir := strings.Split(_subDir, "/")
-	outputDir := strings.Join(subDir[2:len(subDir)-1], "/")
 	if fileName == "" {
 		fileName = "index.html"
 	}
+	if _subDir == "/" {
+		return filepath.Join(".", Domain), fileName
+	}
+	subDir := strings.Split(_subDir, "/")
+	if len(subDir) < 2 {
+		return fileName, _subDir
+	}
+	outputDir := strings.Join(subDir[2:len(subDir)-1], "/")
 	return fileName, outputDir
 }
 
@@ -157,7 +164,13 @@ func GetDomain(urlString string) string {
 //
 // Returns:
 // - error: an error if any occurred during the download or saving process
-func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rateLimit int, changeDisplay bool) (*http.Response, error, []int, string, []string) {
+func DownloadAndSaveResource(url, fileName, outputDir string, reject []string, logFile bool, rateLimit int, changeDisplay bool) (*http.Response, error, []int, string, []string) {
+	for _, ext := range reject {
+		if ext != "" && strings.HasSuffix(fileName, ext) {
+			return nil, nil, nil, "", nil
+		}
+	}
+
 	if GetDomain(url) != Domain {
 		return nil, fmt.Errorf("domain mismatch: %s != %s", GetDomain(url), Domain), nil, "", nil
 	}
@@ -203,14 +216,6 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 		}
 	}
 
-	// Create the local file and copy the resource into it
-	filePath := path.Join(outputDir, fileName)
-	localFile, err := os.Create(filePath)
-	if err != nil {
-		return resp, err, nil, "", nil
-	}
-	defer localFile.Close()
-
 	const barWidth = 50
 	progress := make([]rune, barWidth)
 	startTime := time.Now()
@@ -224,7 +229,15 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 	} else {
 		return resp, fmt.Errorf("error %s", err), nil, "", nil
 	}
-	initString += fmt.Sprintf("Content size: %d\n", totalSize)
+	initString += fmt.Sprintf("Content size: %s\n", FormatFileSize(totalSize))
+
+	// Create the local file and copy the resource into it
+	filePath := path.Join(outputDir, fileName)
+	localFile, err := os.Create(filePath)
+	if err != nil {
+		return resp, err, nil, "", nil
+	}
+	defer localFile.Close()
 	initString += fmt.Sprintf("Saving file to: %s\n", filePath)
 
 	if !logFile && !changeDisplay {
@@ -235,6 +248,7 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 	}
 
 	var downloadedSize int
+	var file *os.File
 	for {
 		buffer := make([]byte, 1024)
 		chunk, err := resp.Body.Read(buffer)
@@ -284,7 +298,7 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 			if !logFile && !changeDisplay {
 				fmt.Print("\n\n" + endString)
 			} else if logFile {
-				file, err := os.Create("wget-log")
+				file, err = os.Create("wget-log")
 				if err != nil {
 					return resp, fmt.Errorf("error %s", err), nil, "", nil
 				}
@@ -301,6 +315,30 @@ func DownloadAndSaveResource(url, fileName, outputDir string, logFile bool, rate
 			time.Sleep(sleepDuration)
 		}
 	}
+
+	// if strings.HasSuffix(fileName, ".css") {
+		cssContent, err := os.ReadFile(filePath)
+		if err != nil {
+			fmt.Println("Error reading CSS file:", err)
+			return resp, fmt.Errorf("error %s", err), nil, "", nil
+		}
+
+		// Define a regular expression to match URLs in the CSS file
+		urlRegex := regexp.MustCompile(`url\(['"]?([^'"]+)'["']?\)`)
+
+		// Find all matches in the CSS content
+		matches := urlRegex.FindAllStringSubmatch(string(cssContent), -1)
+
+		// Extract and print the URLs
+		for _, match := range matches {
+			if len(match) > 1 {
+				url := match[1]
+				fileName, outputDir := GetFilenameAndDirFromURL(url)
+				DownloadAndSaveResource(url, fileName, outputDir, reject, logFile, rateLimit, changeDisplay)
+			}
+		}
+	// }
+
 	return resp, err, Res, Finish, TabUrl
 }
 
